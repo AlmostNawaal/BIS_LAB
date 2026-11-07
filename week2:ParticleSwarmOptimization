@@ -1,0 +1,118 @@
+import random
+import math
+
+# ==========================================
+# 1. DEFINE THE PROBLEM (Cost Minimization)
+# ==========================================
+START = (0.0, 0.0)
+END = (10.0, 10.0)
+OBSTACLE_CENTER = (5.0, 5.0)
+OBSTACLE_RADIUS = 2.0
+NUM_WAYPOINTS = 5
+
+def hits_obstacle(p1, p2):
+    for i in range(11):
+        t = i / 10
+        x = p1[0] + t * (p2[0] - p1[0])
+        y = p1[1] + t * (p2[1] - p1[1])
+        if math.hypot(x - OBSTACLE_CENTER[0], y - OBSTACLE_CENTER[1]) < OBSTACLE_RADIUS:
+            return True
+    return False
+
+def calculate_cost(path):
+    """Lower cost is better (unlike GA fitness where higher was better)."""
+    total_dist = 0.0
+    crashed = False
+    full_path = [START] + path + [END]
+    
+    for i in range(len(full_path) - 1):
+        p1, p2 = full_path[i], full_path[i+1]
+        total_dist += math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+        if hits_obstacle(p1, p2):
+            crashed = True
+            
+    return total_dist + 1000.0 if crashed else total_dist
+
+# ==========================================
+# 2. INITIALIZE PSO PARAMETERS
+# ==========================================
+NUM_PARTICLES = 50
+ITERATIONS = 150
+W = 0.7    # Inertia weight
+C1 = 1.5   # Cognitive (personal best) weight
+C2 = 1.5   # Social (global best) weight
+
+# ==========================================
+# 3. CREATE INITIAL SWARM
+# ==========================================
+swarm = []
+gbest_position = None
+gbest_cost = float('inf')
+
+for _ in range(NUM_PARTICLES):
+    # Each particle represents a full path of 5 waypoints
+    position = [(random.uniform(0, 10), random.uniform(0, 10)) for _ in range(NUM_WAYPOINTS)]
+    velocity = [(random.uniform(-1, 1), random.uniform(-1, 1)) for _ in range(NUM_WAYPOINTS)]
+    cost = calculate_cost(position)
+    
+    particle = {
+        'pos': position,
+        'vel': velocity,
+        'pbest_pos': list(position),
+        'pbest_cost': cost
+    }
+    swarm.append(particle)
+    
+    if cost < gbest_cost:
+        gbest_cost = cost
+        gbest_position = list(position)
+
+# ==========================================
+# 4. ITERATION (Swarm Optimization Loop)
+# ==========================================
+for _ in range(ITERATIONS):
+    for p in swarm:
+        new_pos = []
+        new_vel = []
+        
+        for i in range(NUM_WAYPOINTS):
+            r1, r2 = random.random(), random.random()
+            
+            # Update X and Y velocities
+            vx = (W * p['vel'][i][0] + 
+                  C1 * r1 * (p['pbest_pos'][i][0] - p['pos'][i][0]) + 
+                  C2 * r2 * (gbest_position[i][0] - p['pos'][i][0]))
+            
+            vy = (W * p['vel'][i][1] + 
+                  C1 * r1 * (p['pbest_pos'][i][1] - p['pos'][i][1]) + 
+                  C2 * r2 * (gbest_position[i][1] - p['pos'][i][1]))
+            
+            # Update X and Y coordinates and clamp within map bounds (0 to 10)
+            nx = max(0.0, min(10.0, p['pos'][i][0] + vx))
+            ny = max(0.0, min(10.0, p['pos'][i][1] + vy))
+            
+            new_vel.append((vx, vy))
+            new_pos.append((nx, ny))
+            
+        p['vel'] = new_vel
+        p['pos'] = new_pos
+        
+        # Evaluate new path
+        cost = calculate_cost(new_pos)
+        if cost < p['pbest_cost']:
+            p['pbest_cost'] = cost
+            p['pbest_pos'] = list(new_pos)
+            
+        if cost < gbest_cost:
+            gbest_cost = cost
+            gbest_position = list(new_pos)
+
+# ==========================================
+# 5. OUTPUT THE BEST SOLUTION
+# ==========================================
+print("--- PSO OPTIMAL PATH FOUND ---")
+print(f"Total Distance: {gbest_cost:.2f} units")
+print(f"Start Point: {START}")
+for i, wp in enumerate(gbest_position, 1):
+    print(f" Waypoint {i}: ({wp[0]:.2f}, {wp[1]:.2f})")
+print(f"End Point: {END}")
