@@ -1,0 +1,125 @@
+import random
+import math
+
+# ==========================================
+# 1. DEFINE THE PROBLEM
+# ==========================================
+START = (0.0, 0.0)
+END = (10.0, 10.0)
+OBSTACLE_CENTER = (5.0, 5.0)
+OBSTACLE_RADIUS = 2.0
+NUM_WAYPOINTS = 5
+
+def hits_obstacle(p1, p2):
+    """Checks if a path segment passes inside the obstacle radius."""
+    # Check 10 sample points along the line segment
+    for i in range(11):
+        t = i / 10
+        x = p1[0] + t * (p2[0] - p1[0])
+        y = p1[1] + t * (p2[1] - p1[1])
+        if math.sqrt((x - OBSTACLE_CENTER[0])**2 + (y - OBSTACLE_CENTER[1])**2) < OBSTACLE_RADIUS:
+            return True
+    return False
+
+def calculate_distance(path):
+    """Calculates the total length of the flight path."""
+    total = 0.0
+    full_path = [START] + path + [END]
+    for i in range(len(full_path) - 1):
+        p1, p2 = full_path[i], full_path[i+1]
+        total += math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+    return total
+
+# ==========================================
+# 2. INITIALIZE PARAMETERS
+# ==========================================
+POP_SIZE = 100
+CROSSOVER_RATE = 0.80
+MUTATION_RATE = 0.15
+GENERATIONS = 150
+
+# ==========================================
+# 3. CREATE INITIAL POPULATION
+# ==========================================
+population = []
+for _ in range(POP_SIZE):
+    # Each path is a list of 5 random (X, Y) coordinates between 0 and 10
+    path = [(random.uniform(0, 10), random.uniform(0, 10)) for _ in range(NUM_WAYPOINTS)]
+    population.append(path)
+
+# ==========================================
+# 8. ITERATION (Evolution Loop)
+# ==========================================
+best_path = None
+best_fitness = -1
+
+for gen in range(GENERATIONS):
+
+    # 4. EVALUATE FITNESS
+    fitness_scores = []
+    for path in population:
+        length = calculate_distance(path)
+
+        # Check if any segment crashes
+        crashed = False
+        full_path = [START] + path + [END]
+        for i in range(len(full_path) - 1):
+            if hits_obstacle(full_path[i], full_path[i+1]):
+                crashed = True
+                break
+
+        # Shorter paths get higher fitness. Add a heavy penalty if crashed.
+        score = 1 / (length + 1000) if crashed else 1 / length
+        fitness_scores.append(score)
+
+        # Track the absolute best path found
+        if score > best_fitness:
+            best_fitness = score
+            best_path = path
+
+    # Build the next generation pool
+    next_population = []
+
+    # Elitism: Keep the best path from this generation automatically
+    next_population.append(population[fitness_scores.index(max(fitness_scores))])
+
+    while len(next_population) < POP_SIZE:
+
+        # 5. SELECTION (Tournament Selection)
+        def select_parent():
+            tournament = random.sample(list(zip(population, fitness_scores)), 3)
+            return max(tournament, key=lambda x: x[1])[0]
+
+        parent1 = select_parent()
+        parent2 = select_parent()
+
+        # 6. CROSSOVER
+        if random.random() < CROSSOVER_RATE:
+            split = random.randint(1, NUM_WAYPOINTS - 1)
+            child1 = parent1[:split] + parent2[split:]
+            child2 = parent2[:split] + parent1[split:]
+        else:
+            child1, child2 = parent1.copy(), parent2.copy()
+
+        # 7. MUTATION
+        for child in [child1, child2]:
+            for i in range(NUM_WAYPOINTS):
+                if random.random() < MUTATION_RATE:
+                    # Nudge the coordinate slightly in a random direction (-1.0 to 1.0)
+                    new_x = max(0.0, min(10.0, child[i][0] + random.uniform(-1.0, 1.0)))
+                    new_y = max(0.0, min(10.0, child[i][1] + random.uniform(-1.0, 1.0)))
+                    child[i] = (new_x, new_y)
+
+        next_population.extend([child1, child2])
+
+    population = next_population[:POP_SIZE]
+
+# ==========================================
+# 9. OUTPUT THE BEST SOLUTION
+# ==========================================
+print("--- OPTIMAL PATH FOUND ---")
+print(f"Total Distance: {1 / best_fitness:.2f} units")
+print(f"Start Point: {START}")
+for i, wp in enumerate(best_path, 1):
+    print(f" Waypoint {i}: ({wp[0]:.2f}, {wp[1]:.2f})")
+print(f"End Point: {END}")
