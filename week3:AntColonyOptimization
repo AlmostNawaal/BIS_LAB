@@ -1,0 +1,103 @@
+import random
+import math
+
+# ==========================================
+# 1. DEFINE THE GRID & OBSTACLE
+# ==========================================
+GRID_SIZE = 11  # Nodes from 0 to 10
+START = (0, 0)
+END = (10, 10)
+OBSTACLE_CENTER = (5, 5)
+OBSTACLE_RADIUS = 2.0
+
+def is_valid(node):
+    x, y = node
+    if not (0 <= x < GRID_SIZE and 0 <= y < GRID_SIZE):
+        return False
+    # Block nodes inside the obstacle radius
+    if math.hypot(x - OBSTACLE_CENTER[0], y - OBSTACLE_CENTER[1]) < OBSTACLE_RADIUS:
+        return False
+    return True
+
+def get_neighbors(node):
+    """Returns valid 8-directional adjacent grid nodes."""
+    x, y = node
+    directions = [(-1,0), (1,0), (0,-1), (0,1), (-1,-1), (-1,1), (1,-1), (1,1)]
+    return [(x+dx, y+dy) for dx, dy in directions if is_valid((x+dx, y+dy))]
+
+def distance(p1, p2):
+    return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+
+# ==========================================
+# 2. INITIALIZE ACO PARAMETERS
+# ==========================================
+NUM_ANTS = 30
+ITERATIONS = 80
+ALPHA = 1.0       # Pheromone weight
+BETA = 2.5        # Heuristic (greedy distance) weight
+EVAPORATION = 0.2 # 20% pheromone evaporation per iteration
+Q = 10.0          # Pheromone deposit constant
+
+# Initialize pheromone levels on all valid nodes
+pheromones = {(x, y): 1.0 for x in range(GRID_SIZE) for y in range(GRID_SIZE) if is_valid((x, y))}
+
+# ==========================================
+# 3. ITERATION (Colony Search Loop)
+# ==========================================
+best_path = None
+best_length = float('inf')
+
+for gen in range(ITERATIONS):
+    all_ant_paths = []
+    
+    for _ in range(NUM_ANTS):
+        current = START
+        path = [current]
+        visited = {current}
+        
+        while current != END:
+            neighbors = [n for n in get_neighbors(current) if n not in visited]
+            if not neighbors:
+                break  # Ant hit a dead end
+            
+            # Calculate transition probabilities
+            weights = []
+            for n in neighbors:
+                tau = pheromones[n] ** ALPHA
+                # Heuristic: favor moves closer to END (avoid division by zero at END)
+                dist_to_end = distance(n, END)
+                eta = (1.0 / (dist_to_end + 0.1)) ** BETA
+                weights.append(tau * eta)
+                
+            # Choose next waypoint probabilistically
+            next_node = random.choices(neighbors, weights=weights, k=1)[0]
+            path.append(next_node)
+            visited.add(next_node)
+            current = next_node
+            
+        # Only keep paths that successfully reached the destination
+        if current == END:
+            length = sum(distance(path[i], path[i+1]) for i in range(len(path)-1))
+            all_ant_paths.append((path, length))
+            
+            if length < best_length:
+                best_length = length
+                best_path = path
+
+    # Evaporate existing pheromones
+    for node in pheromones:
+        pheromones[node] *= (1.0 - EVAPORATION)
+        
+    # Deposit new pheromones based on path quality
+    for path, length in all_ant_paths:
+        deposit = Q / length
+        for node in path:
+            pheromones[node] += deposit
+
+# ==========================================
+# 4. OUTPUT THE BEST SOLUTION
+# ==========================================
+print("--- ACO OPTIMAL PATH FOUND ---")
+print(f"Total Distance: {best_length:.2f} units")
+print("Waypoints Sequence:")
+print(" -> ".join(str(wp) for wp in best_path))
